@@ -83,6 +83,8 @@ def test_banner_updates_right_after_a_guess():
     submit_guess(at, "10")
     assert at.session_state["attempts"] == 1
     assert "Attempts left: 7" in banner(at)
+    # The debug panel had the same problem
+    assert "Attempts: `1`" in [m.value for m in at.expander[0].markdown]
     submit_guess(at, "20")
     assert at.session_state["attempts"] == 2
     assert "Attempts left: 6" in banner(at)
@@ -138,16 +140,41 @@ def test_first_try_win_scores_100_and_ends_the_game():
     assert at.session_state["score"] == 100
 
 
-def test_wrong_guesses_cost_5_points_each():
+def test_score_never_goes_negative_during_a_game():
+    # Wrong guesses used to push the score below zero
     at = start_app(secret=50)
     submit_guess(at, "60")
-    assert at.session_state["score"] == -5
+    assert at.session_state["score"] == 0
     submit_guess(at, "40")
-    assert at.session_state["score"] == -10
+    assert at.session_state["score"] == 0
     submit_guess(at, "50")
     # A win on the third attempt is worth 80
-    assert at.session_state["score"] == 70
-    assert "Final score: 70" in at.success[0].value
+    assert at.session_state["score"] == 80
+    assert "Final score: 80" in at.success[0].value
+
+
+def test_lost_game_ends_with_a_score_of_zero():
+    # My first game ended with "Score: -35"
+    at = start_app(secret=50)
+    for _ in range(8):
+        submit_guess(at, "1")
+        assert at.session_state["score"] == 0
+    assert at.session_state["status"] == "lost"
+    assert "Score: 0." in at.error[0].value
+    # The loss message stays on screen after another click
+    at.checkbox[0].uncheck().run()
+    assert "Score: 0." in at.error[0].value
+
+
+def test_win_on_the_last_attempt_shows_a_positive_final_score():
+    # Seven wrong guesses and then a win used to show "Final score: -5"
+    at = start_app(secret=50)
+    for _ in range(7):
+        submit_guess(at, "1")
+    submit_guess(at, "50")
+    assert at.session_state["status"] == "won"
+    assert at.session_state["score"] == 30
+    assert "Final score: 30" in at.success[0].value
 
 
 # --- Bug: the hint and final score disappeared on the next click ---
@@ -166,6 +193,9 @@ def test_show_hint_checkbox_hides_and_shows_the_last_hint():
     at.checkbox[0].uncheck().run()
     assert len(at.warning) == 0
     at.checkbox[0].check().run()
+    assert "LOWER" in at.warning[0].value
+    # An invalid guess does not wipe the last hint
+    submit_guess(at, "abc")
     assert "LOWER" in at.warning[0].value
 
 
@@ -191,6 +221,12 @@ def test_new_game_after_a_loss_resets_everything():
     at.session_state["secret"] = 50
     submit_guess(at, "60")
     assert "LOWER" in at.warning[0].value
+
+    # Win this second game, then start a third: the 90 points must not carry over
+    submit_guess(at, "50")
+    assert at.session_state["score"] == 90
+    click_new_game(at)
+    assert at.session_state["score"] == 0
 
 
 # --- Bug: difficulty was ignored ---
@@ -218,3 +254,10 @@ def test_switching_difficulty_starts_a_new_game():
     assert at.session_state["score"] == 0
     assert at.session_state["history"] == []
     assert "Attempts left: 6" in banner(at)
+
+    # Win on Easy, then switch again: the 100 points must not carry over
+    at.session_state["secret"] = 7
+    submit_guess(at, "7")
+    assert at.session_state["score"] == 100
+    at.sidebar.selectbox[0].set_value("Hard").run()
+    assert at.session_state["score"] == 0

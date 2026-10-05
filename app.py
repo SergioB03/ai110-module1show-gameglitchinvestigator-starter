@@ -49,9 +49,11 @@ low, high = get_range_for_difficulty(difficulty)
 st.sidebar.caption(f"Range: {low} to {high}")
 st.sidebar.caption(f"Attempts allowed: {attempt_limit}")
 
-# FIX: Attempts used to start at 1, which cost the player a guess. Starting a game
-# through start_new_game() sets it to 0. Switching difficulty also starts a new
-# game now, so the secret is always inside the range shown in the sidebar.
+# FIX: Attempts used to start at 1, which cost the player a guess. Claude Code
+# spotted this when its replay of the original game showed "Attempts left: 7" on a
+# fresh Normal game. Starting a game through start_new_game() sets it to 0.
+# Switching difficulty also starts a new game now, so the secret is always inside
+# the range shown in the sidebar.
 if (
     "secret" not in st.session_state
     or st.session_state.get("difficulty") != difficulty
@@ -87,8 +89,9 @@ elif submit and st.session_state.status == "playing":
     ok, guess_int, err = parse_guess(raw_guess, low, high)
 
     if not ok:
-        # FIX: An invalid guess used to use up an attempt. The attempt is now
-        # counted only after parse_guess accepts the input.
+        # FIX: An invalid guess used to use up an attempt. Claude Code found it by
+        # submitting "abc" in its replay: the attempt count went from 1 to 2. The
+        # attempt is now counted only after parse_guess accepts the input.
         st.error(err)
     else:
         st.session_state.attempts += 1
@@ -134,7 +137,8 @@ elif st.session_state.status == "lost":
         f"Start a new game to try again."
     )
 
-# FIX: The range text was hardcoded as "1 and 100"; it now uses the real range.
+# FIX: The range text was hardcoded as "1 and 100". Claude Code flagged it after the
+# Easy banner still said "between 1 and 100"; it now uses the real range.
 status_banner.info(
     f"Guess a number between {low} and {high}. "
     f"Attempts left: {attempt_limit - st.session_state.attempts}"

@@ -83,7 +83,10 @@ def update_score(current_score: int, outcome: str, attempt_number: int):
 
     # FIX: "Too High" used to add 5 points on even attempts. Found by Claude Code
     # while replaying the game; every wrong guess now costs 5.
+    # FIX: The score could go negative (my first game ended at -35, and a win on the
+    # last attempt could show a negative final score). Claude Code's first fix kept
+    # that; I asked for the score to never drop below zero.
     if outcome in ("Too High", "Too Low"):
-        return current_score - 5
+        return max(0, current_score - 5)
 
     return current_score

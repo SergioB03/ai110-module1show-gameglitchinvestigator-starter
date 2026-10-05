@@ -73,6 +73,9 @@ def test_win_is_worth_10_less_per_extra_attempt():
     assert update_score(0, "Win", 2) == 90
     assert update_score(0, "Win", 5) == 60
 
+def test_win_points_are_added_to_the_current_score():
+    assert update_score(40, "Win", 1) == 140
+
 def test_win_is_never_worth_less_than_10():
     assert update_score(0, "Win", 50) == 10
 
@@ -81,6 +84,25 @@ def test_win_is_never_worth_less_than_10():
 def test_wrong_guess_always_costs_5(outcome, attempt_number):
     # "Too High" used to ADD 5 points on even attempts
     assert update_score(20, outcome, attempt_number) == 15
+
+@pytest.mark.parametrize("outcome", ["Too High", "Too Low"])
+@pytest.mark.parametrize("current_score", [0, 3, 5])
+def test_score_never_drops_below_zero(outcome, current_score):
+    # My first game ended with a score of -35
+    assert update_score(current_score, outcome, 1) == 0
+
+def test_score_stays_at_zero_through_a_whole_losing_game():
+    score = 0
+    for attempt_number in range(1, 9):
+        score = update_score(score, "Too Low", attempt_number)
+        assert score == 0
+
+def test_win_after_only_wrong_guesses_is_still_positive():
+    # A win on Normal's 8th attempt used to show a final score of -5
+    score = 0
+    for attempt_number in range(1, 8):
+        score = update_score(score, "Too High", attempt_number)
+    assert update_score(score, "Win", 8) == 30
 
 def test_unknown_outcome_leaves_score_alone():
     assert update_score(20, "Something else", 1) == 20
