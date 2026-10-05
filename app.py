@@ -7,6 +7,7 @@ def get_range_for_difficulty(difficulty: str):
     if difficulty == "Normal":
         return 1, 100
     if difficulty == "Hard":
+        # FIXME: Hard range (1-50) is narrower than Normal (1-100).
         return 1, 50
     return 1, 100
 
@@ -20,6 +21,7 @@ def parse_guess(raw: str):
 
     try:
         if "." in raw:
+            # FIXME: 50.9 is silently truncated to 50, and nothing checks the range.
             value = int(float(raw))
         else:
             value = int(raw)
@@ -34,10 +36,12 @@ def check_guess(guess, secret):
         return "Win", "🎉 Correct!"
 
     try:
+        # FIXME: Logic breaks here - the hint messages are swapped (too high says "Go HIGHER").
         if guess > secret:
             return "Too High", "📈 Go HIGHER!"
         else:
             return "Too Low", "📉 Go LOWER!"
+    # FIXME: This fallback hides the str/int mix-up and compares text ("9" > "50").
     except TypeError:
         g = str(guess)
         if g == secret:
@@ -49,12 +53,14 @@ def check_guess(guess, secret):
 
 def update_score(current_score: int, outcome: str, attempt_number: int):
     if outcome == "Win":
+        # FIXME: Off by one - a first-try win should score the full 100.
         points = 100 - 10 * (attempt_number + 1)
         if points < 10:
             points = 10
         return current_score + points
 
     if outcome == "Too High":
+        # FIXME: A wrong guess should never add points.
         if attempt_number % 2 == 0:
             return current_score + 5
         return current_score - 5
@@ -93,6 +99,7 @@ if "secret" not in st.session_state:
     st.session_state.secret = random.randint(low, high)
 
 if "attempts" not in st.session_state:
+    # FIXME: Starting at 1 costs the player one attempt.
     st.session_state.attempts = 1
 
 if "score" not in st.session_state:
@@ -106,6 +113,8 @@ if "history" not in st.session_state:
 
 st.subheader("Make a guess")
 
+# FIXME: Range text is hardcoded, and this banner is drawn before the guess is
+# processed, so it always shows the previous state.
 st.info(
     f"Guess a number between 1 and 100. "
     f"Attempts left: {attempt_limit - st.session_state.attempts}"
@@ -131,6 +140,7 @@ with col2:
 with col3:
     show_hint = st.checkbox("Show hint", value=True)
 
+# FIXME: New Game never resets status/history and ignores the difficulty range.
 if new_game:
     st.session_state.attempts = 0
     st.session_state.secret = random.randint(1, 100)
@@ -145,6 +155,7 @@ if st.session_state.status != "playing":
     st.stop()
 
 if submit:
+    # FIXME: The attempt is counted before the input is validated.
     st.session_state.attempts += 1
 
     ok, guess_int, err = parse_guess(raw_guess)
@@ -155,6 +166,7 @@ if submit:
     else:
         st.session_state.history.append(guess_int)
 
+        # FIXME: Logic breaks here - the secret becomes a string on every other attempt.
         if st.session_state.attempts % 2 == 0:
             secret = str(st.session_state.secret)
         else:
