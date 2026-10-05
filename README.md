@@ -41,7 +41,7 @@ A number guessing game built with Streamlit. The app picks a secret whole number
 | Normal | 1 to 100 | 8 |
 | Hard | 1 to 200 | 5 |
 
-A win is worth 100 points minus 10 for every extra attempt (never less than 10). Each wrong guess costs 5 points.
+A win is worth 100 points minus 10 for every extra attempt (never less than 10). Each wrong guess costs 5 points, but the score never drops below 0. Because every game starts at 0, the score stays at 0 until you win.
 
 ### Bugs I found
 
@@ -52,10 +52,10 @@ The starter game never crashed, but it could not be played fairly. The full repr
 | 1 | Hints were backwards: a guess that was too high said "Go HIGHER!" | `check_guess` in `app.py` |
 | 2 | The secret was turned into a string on every other attempt, so guesses were compared as text and the same guess could get opposite hints | submit handler in `app.py` |
 | 3 | The attempt counter started at 1, so the player got one guess fewer than the sidebar promised | session state setup in `app.py` |
-| 4 | New Game did not reset the status, history or score, so a finished game stayed stuck on "Game over" | New Game handler in `app.py` |
+| 4 | New Game did not reset the status, history or score, so a finished game stayed stuck on "Game over" or "You already won" | New Game handler in `app.py` |
 | 5 | Difficulty was ignored: the banner always said "1 and 100", New Game always picked from 1-100, and switching difficulty kept the old secret | `app.py` |
 | 6 | Hard used the range 1-50, narrower than Normal | `get_range_for_difficulty` |
-| 7 | A wrong "Too High" guess added 5 points on even attempts, and a first-try win could not score 100 | `update_score` |
+| 7 | A wrong "Too High" guess added 5 points on even attempts, a first-try win could not score 100, and the score could go negative (a lost game ended at -35, and a win on the last guess showed "Final score: -20") | `update_score` |
 | 8 | Invalid input used up an attempt, `50.9` was silently cut down to 50, and out-of-range guesses like `-2` were accepted | `parse_guess` and the submit handler |
 | 9 | The "Attempts left" banner was drawn before the guess was processed, so it was always one click behind | `app.py` |
 | 10 | The hint and the "You won" message with the final score were only drawn right after Submit, so they disappeared on the next click | submit handler in `app.py` |
@@ -68,7 +68,7 @@ The starter game never crashed, but it could not be played fairly. The full repr
 - **Attempts.** The counter starts at 0 and only goes up when a guess is valid.
 - **New Game.** One `start_new_game()` helper resets the secret, attempts, score, status and history, and picks the secret from the current difficulty's range. Changing the difficulty starts a new game too.
 - **Banner.** The banner and debug panel are placeholders that get filled in at the end of the script, after the guess has been processed. The range in the banner comes from the difficulty.
-- **Scoring.** Every wrong guess costs 5 points, and a first-try win is worth 100.
+- **Scoring.** Every wrong guess costs 5 points, a first-try win is worth 100, and the score never drops below 0.
 - **Input.** `parse_guess` rejects text, decimals and numbers outside the range, each with its own message, and none of them cost an attempt. It reads the number with `Decimal`, so `49.99999999999999999` is not rounded up to 50.
 - **Messages.** The last hint and the win or loss message are kept in session state and drawn on every rerun, so the final score stays on screen until you start a new game.
 - **Hard mode.** The range is now 1 to 200.
@@ -79,12 +79,12 @@ The starter game never crashed, but it could not be played fairly. The full repr
 One sample game on Normal difficulty. The secret in this run was 42 (you can see it under "Developer Debug Info").
 
 1. The page loads. The sidebar shows "Range: 1 to 100" and "Attempts allowed: 8", and the banner says "Guess a number between 1 and 100. Attempts left: 8".
-2. User enters a guess of 50. The game shows "📉 Go LOWER!" and the banner drops to "Attempts left: 7". The score is -5.
-3. User enters a guess of 25. The game shows "📈 Go HIGHER!" and the banner shows "Attempts left: 6". The score is -10.
+2. User enters a guess of 50. The game shows "📉 Go LOWER!" and the banner drops to "Attempts left: 7". The score stays at 0, because it never drops below zero.
+3. User enters a guess of 25. The game shows "📈 Go HIGHER!" and the banner shows "Attempts left: 6". The score is still 0.
 4. User types `abc`. The game shows "That is not a number." and the banner stays at "Attempts left: 6". The last hint, "📈 Go HIGHER!", stays on screen.
 5. User types `-2`. The game shows "Enter a number between 1 and 100." and no attempt is used.
 6. User types `42.5`. The game shows "Enter a whole number." and no attempt is used.
-7. User enters a guess of 42. The game shows "🎉 Correct!", balloons, and "You won! The secret was 42. Final score: 70. Start a new game to play again." The two wrong guesses cost 10 points and a win on the third attempt is worth 80.
+7. User enters a guess of 42. The game shows "🎉 Correct!", balloons, and "You won! The secret was 42. Final score: 80. Start a new game to play again." A win on the third attempt is worth 80: 100 minus 10 for each of the two extra attempts.
 8. User clicks Submit again. Nothing changes: the win message and the final score stay on screen, and no attempt is used.
 9. User clicks "New Game 🔁". The game shows "New game started.", the banner goes back to "Attempts left: 8", and the score and history are cleared.
 10. User switches the difficulty to Hard. A new game starts on its own, and the banner says "Guess a number between 1 and 200. Attempts left: 5".
@@ -99,16 +99,16 @@ rootdir: C:\Users\sergi\ai110-module1show-gameglitchinvestigator-starter
 configfile: pytest.ini
 testpaths: tests
 plugins: anyio-4.15.1
-collected 68 items
+collected 79 items
 
-tests\test_app_flow.py ..................                                [ 26%]
-tests\test_game_logic.py ............................................... [ 95%]
-...                                                                      [100%]
+tests\test_app_flow.py ....................                              [ 25%]
+tests\test_game_logic.py ............................................... [ 84%]
+............                                                             [100%]
 
-============================= 68 passed in 2.96s ==============================
+============================= 79 passed in 3.46s ==============================
 ```
 
-`tests/test_game_logic.py` tests the rules in `logic_utils.py`. `tests/test_app_flow.py` plays `app.py` headlessly with Streamlit's `AppTest` to cover the session-state bugs. Run against the original starter code, 40 of these 68 tests fail.
+`tests/test_game_logic.py` tests the rules in `logic_utils.py`. `tests/test_app_flow.py` plays `app.py` headlessly with Streamlit's `AppTest` to cover the session-state bugs. Run against the original starter code, 49 of these 79 tests fail.
 
 ## 🚀 Stretch Features
 

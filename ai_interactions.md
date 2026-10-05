@@ -21,8 +21,11 @@ I used Claude Code (the VS Code extension) in agent mode. I pasted in the full p
 5. Moved the four logic functions into `logic_utils.py`, fixed them, and reworked the state handling in `app.py` (one `start_new_game()` helper, placeholders for the banner and debug panel). Committed.
 6. Wrote `tests/test_game_logic.py` and `tests/test_app_flow.py`, added `pytest.ini`, and ran the suite against both the fixed code and a copy of the original code.
 7. Opened the running app in Chrome and submitted `-2` to check the live game.
-8. Had a second reviewer agent read the diff for remaining bugs. It found that `float()` rounded `49.99999999999999999` up to 50, that the hint and final score disappeared on the next click, and that five behaviours in `app.py` had no test. Claude Code fixed the two bugs, added the missing tests, and committed.
-9. Wrote `reflection.md`, `README.md` and this log, then committed and pushed.
+8. Wrote the bug log and the first draft of `reflection.md` and committed it.
+9. Had a second reviewer agent read the diff for remaining bugs. It found that `float()` rounded `49.99999999999999999` up to 50, that the hint and final score disappeared on the next click, and that five behaviours in `app.py` had no test. Claude Code fixed the two bugs, added the missing tests, and committed.
+10. Finished `reflection.md`, wrote `README.md` and this log, then committed and pushed.
+11. After I asked for the score to never drop below zero, added the floor to `update_score`, wrote tests for it, and updated the docs.
+12. Ran a second review with three reviewer agents (code and tests, accuracy of the docs, assignment requirements), each followed by another agent that tried to disprove its findings. All nine findings were confirmed: tests that could no longer catch a score that is not reset, a few inaccurate statements in the reflection and README, and three `# FIX` comments that did not say who found the bug. Claude Code fixed them, then committed and pushed.
 
 **What did you have to verify or fix manually?**
 
@@ -31,7 +34,8 @@ I used Claude Code (the VS Code extension) in agent mode. I pasted in the full p
 - Its first banner test passed on the buggy code as well, because the off-by-one counter and the stale banner cancelled each other out. That only showed up when the tests were run against the original code, and the test was rewritten.
 - Plain `pytest` failed with `ModuleNotFoundError: No module named 'logic_utils'` even though `python -m pytest` passed, so `pytest.ini` was added.
 - The browser check only got as far as the first screen and one guess, because the Chrome window was resized partway through. Playing a full game in the live app was left to me.
-- The design decisions were mine: keep `check_guess` returning `(outcome, message)` and fix the tests, and widen Hard to 1-200.
+- Claude Code's first fix left the score able to go negative. It pointed out that a win on the last attempt could show "Final score: -5" and had left that as it was. I asked for the score to never drop below zero, and it added `max(0, ...)` to `update_score` with tests.
+- The design decisions were mine: keep `check_guess` returning `(outcome, message)` and fix the tests, widen Hard to 1-200, and floor the score at zero.
 
 ---
 
@@ -50,4 +54,5 @@ I did not write a separate prompt for each test. Claude Code asked whether I wan
 | Text and non-numbers (`abc`, `12abc`, `nan`, `inf`) | Same option | `test_parse_rejects_non_numbers` | Yes | `float()` accepts `nan` and `inf`, so I wanted proof they are rejected |
 | Empty or whitespace-only input | Same option | `test_parse_empty_input`: returns "Enter a guess." | Yes. The whitespace case fails on the original code | Pressing Submit with nothing typed should ask for a guess |
 | Both ends of the range (`1`, `100`) | Same option | `test_parse_accepts_both_ends_of_range` | Yes | A range check is easy to get off by one, so the edges need their own test |
+| Score at zero when a wrong guess comes in (score `0`, `3`, `5`) | "i would rather it not drop below zero" (my request) | `test_score_never_drops_below_zero`: `update_score(current_score, outcome, 1)` returns `0` | Yes. The `0` and `3` cases fail on the version before the floor | A penalty of 5 from a score of 3 is the case most likely to slip below zero |
 | Same guess twice in a row (secret 50, guess `9`) | Came out of Claude Code replaying the game | `test_same_guess_gets_the_same_hint_twice` in `tests/test_app_flow.py` | Yes. Fails on the original code | It is the only way to catch the secret changing type between attempts, which the logic tests cannot see |
