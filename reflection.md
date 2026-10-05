@@ -10,11 +10,20 @@ Answer each question in 3 to 5 sentences. Be specific and honest about what actu
 
 **First run.** The app loaded without errors and looked like a normal number guessing game, but I could not win by following the hints. The secret was 77, yet the hints kept saying "Go LOWER!", even when I typed -2, and nothing told me I was out of range. I ran out of attempts with a score of -35. The banner still said "Attempts left: 1" right above the "Out of attempts!" message.
 
+This is what the screen showed at the end of that game (Normal difficulty):
+
+```
+Guess a number between 1 and 100. Attempts left: 1
+Enter your guess: -2
+📉 Go LOWER!
+Out of attempts! The secret was 77. Score: -35
+```
+
 **Bugs I noticed.** Line numbers are from the starter `app.py`, before any edits.
 
-1. **Backwards hints.** A guess below the secret said "📉 Go LOWER!". `check_guess` (lines 37-40) has the two hint messages swapped.
-2. **No range check.** `-2` was accepted and cost me an attempt. `parse_guess` (lines 14-29) never compares the guess with the range.
-3. **Hints that flip.** With a secret of 50, guessing `9` twice gave "Go HIGHER!" and then "Go LOWER!". Lines 158-161 turn the secret into a string on every other attempt, so the numbers are compared as text.
+1. **Backwards hints.** Expected: a guess below the secret gets a hint to go higher. Actual: it said "📉 Go LOWER!". Cause: `check_guess` (lines 37-40) has the two hint messages swapped.
+2. **No range check.** Expected: `-2` is rejected as out of range. Actual: it was accepted and cost me an attempt. Cause: `parse_guess` (lines 14-29) never compares the guess with the range.
+3. **Hints that flip.** Expected: the same guess gets the same hint. Actual: with a secret of 50, guessing `9` twice gave "Go HIGHER!" and then "Go LOWER!". Cause: lines 158-161 turn the secret into a string on every other attempt, so the numbers are compared as text.
 
 I found the first two by playing. Claude Code found the third and the other bugs in the log below. The [README](README.md) lists every bug and its fix.
 
@@ -49,7 +58,7 @@ Row 1 is my own first game. The other rows use a known secret (it is shown in th
 
 **A suggestion that was correct**
 
-- *What the AI suggested:* Claude Code said my "Go LOWER!" problem had two causes: the two hint messages in `check_guess` were swapped, and `app.py` turned the secret into a string on every other attempt. It suggested swapping the messages and always comparing the secret as an int.
+- *What the AI suggested:* Claude Code explained that my "Go LOWER!" problem had two causes: the two hint messages in `check_guess` were swapped, and `app.py` turned the secret into a string on every other attempt. It suggested swapping the messages and always comparing the secret as an int.
 - *Why it was correct:* Both causes were real. With only the messages swapped, a guess of `9` against a secret of 50 would still get the wrong hint on every other attempt.
 - *How I verified it:* `test_hints_from_my_first_game` replays my secret-77 game and gets "Go HIGHER!", and `test_same_guess_gets_the_same_hint_twice` gets the same hint for `9` twice. Both tests fail on the starter code and pass on the fixed code.
 

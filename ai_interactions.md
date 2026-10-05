@@ -43,7 +43,7 @@ I used Claude Code (the VS Code extension) in agent mode. I pasted in the full p
 
 > Document how you used AI to help generate or improve tests.
 
-I did not write a separate prompt for each test. Claude Code asked whether I wanted extra tests for odd inputs (decimals, negatives, text, out-of-range) and I picked that option. The out-of-range tests came from my own bug report.
+My prompt to Claude Code was the project instructions plus "need you to do this and make sure that it will work well and get a good grade". I did not write a separate prompt for each test. Claude Code asked whether I wanted extra tests for odd inputs (decimals, negatives, text, out-of-range) and I picked that option. The out-of-range tests came from my own bug report.
 
 | Edge Case | Prompt Used | AI-Suggested Test | Did It Pass? | Your Reasoning |
 |-----------|-------------|-------------------|--------------|----------------|

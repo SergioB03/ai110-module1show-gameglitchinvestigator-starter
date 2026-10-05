@@ -63,12 +63,14 @@ The starter game never crashed, but it could not be played fairly. The full repr
 
 ### Fixes I applied
 
+Each item says what changed and, for the main fixes, why it works.
+
 - **Refactor.** Moved `get_range_for_difficulty`, `parse_guess`, `check_guess` and `update_score` out of `app.py` into `logic_utils.py`, so `app.py` only handles the Streamlit UI and session state and the rules can be tested on their own.
-- **Hints.** Swapped the two messages in `check_guess` and removed the `try/except` that compared numbers as text. `app.py` now always passes the secret as an int.
-- **Attempts.** The counter starts at 0 and only goes up when a guess is valid.
-- **New Game.** One `start_new_game()` helper resets the secret, attempts, score, status and history, and picks the secret from the current difficulty's range. Changing the difficulty starts a new game too.
+- **Hints.** Swapped the two messages in `check_guess` and removed the `try/except` that compared numbers as text. `app.py` now always passes the secret as an int. Why it works: every comparison is between two numbers, and each outcome is paired with the hint that matches it.
+- **Attempts.** The counter starts at 0 and only goes up when a guess is valid. Why it works: the number of guesses you get now equals the limit shown in the sidebar.
+- **New Game.** One `start_new_game()` helper resets the secret, attempts, score, status and history, and picks the secret from the current difficulty's range. Changing the difficulty starts a new game too. Why it works: the status goes back to "playing", which is what the app checks before it accepts a guess.
 - **Banner.** The banner and debug panel are placeholders that get filled in at the end of the script, after the guess has been processed. The range in the banner comes from the difficulty.
-- **Scoring.** Every wrong guess costs 5 points, a first-try win is worth 100, and the score never drops below 0.
+- **Scoring.** Every wrong guess costs 5 points, a first-try win is worth 100, and the score never drops below 0. Why it works: `max(0, ...)` stops the subtraction at zero, and the win formula now pays the full 100 on attempt 1.
 - **Input.** `parse_guess` rejects text, decimals and numbers outside the range, each with its own message, and none of them cost an attempt. It reads the number with `Decimal`, so `49.99999999999999999` is not rounded up to 50.
 - **Messages.** The last hint and the win or loss message are kept in session state and drawn on every rerun, so the final score stays on screen until you start a new game.
 - **Hard mode.** The range is now 1 to 200.
