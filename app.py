@@ -20,6 +20,7 @@ def start_new_game(difficulty: str, low: int, high: int):
     st.session_state.score = 0
     st.session_state.status = "playing"
     st.session_state.history = []
+    st.session_state.last_hint = None
     st.session_state.difficulty = difficulty
 
 
@@ -82,12 +83,7 @@ with col3:
 if new_game:
     start_new_game(difficulty, low, high)
     st.success("New game started.")
-elif st.session_state.status != "playing":
-    if st.session_state.status == "won":
-        st.success("You already won. Start a new game to play again.")
-    else:
-        st.error("Game over. Start a new game to try again.")
-elif submit:
+elif submit and st.session_state.status == "playing":
     ok, guess_int, err = parse_guess(raw_guess, low, high)
 
     if not ok:
@@ -102,9 +98,7 @@ elif submit:
         # which made the same guess get different hints. Claude Code found it by
         # replaying one guess twice; the secret is now always compared as an int.
         outcome, message = check_guess(guess_int, st.session_state.secret)
-
-        if show_hint:
-            st.warning(message)
+        st.session_state.last_hint = message
 
         st.session_state.score = update_score(
             current_score=st.session_state.score,
@@ -115,17 +109,30 @@ elif submit:
         if outcome == "Win":
             st.balloons()
             st.session_state.status = "won"
-            st.success(
-                f"You won! The secret was {st.session_state.secret}. "
-                f"Final score: {st.session_state.score}"
-            )
         elif st.session_state.attempts >= attempt_limit:
             st.session_state.status = "lost"
-            st.error(
-                f"Out of attempts! "
-                f"The secret was {st.session_state.secret}. "
-                f"Score: {st.session_state.score}"
-            )
+
+# FIX: The hint and the final score used to be drawn only on the rerun right after
+# Submit, so they disappeared on the next click (for example toggling "Show hint").
+# A review pass by a second Claude agent caught this. They are now drawn from
+# session state on every rerun.
+last_hint = st.session_state.get("last_hint")
+if show_hint and last_hint:
+    st.warning(last_hint)
+
+if st.session_state.status == "won":
+    st.success(
+        f"You won! The secret was {st.session_state.secret}. "
+        f"Final score: {st.session_state.score}. "
+        f"Start a new game to play again."
+    )
+elif st.session_state.status == "lost":
+    st.error(
+        f"Out of attempts! "
+        f"The secret was {st.session_state.secret}. "
+        f"Score: {st.session_state.score}. "
+        f"Start a new game to try again."
+    )
 
 # FIX: The range text was hardcoded as "1 and 100"; it now uses the real range.
 status_banner.info(

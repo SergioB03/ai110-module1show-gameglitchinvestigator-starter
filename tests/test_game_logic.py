@@ -119,14 +119,19 @@ def test_parse_empty_input(raw):
 def test_parse_rejects_non_numbers(raw):
     assert parse_guess(raw) == (False, None, "That is not a number.")
 
-def test_parse_rejects_extremely_large_number():
-    # 400 digits overflows to infinity instead of crashing
-    assert parse_guess("9" * 400) == (False, None, "That is not a number.")
+@pytest.mark.parametrize("digits", [400, 5000])
+def test_parse_rejects_extremely_large_number(digits):
+    # A huge number is just out of range; it must not crash or hang
+    assert parse_guess("9" * digits, 1, 100) == (False, None, "Enter a number between 1 and 100.")
 
 @pytest.mark.parametrize("raw", ["50.9", "0.5", "-3.14"])
 def test_parse_rejects_decimals(raw):
     # 50.9 used to be cut down to 50 and could win the game
     assert parse_guess(raw) == (False, None, "Enter a whole number.")
+
+def test_parse_rejects_decimal_that_float_would_round_to_50():
+    # float("49.99999999999999999") == 50.0, so this guess used to count as 50
+    assert parse_guess("49.99999999999999999") == (False, None, "Enter a whole number.")
 
 def test_parse_accepts_whole_number_written_as_decimal():
     assert parse_guess("50.0") == (True, 50, None)

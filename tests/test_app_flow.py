@@ -1,10 +1,11 @@
 """Play app.py headlessly with Streamlit's AppTest.
 
 These cover the session-state bugs (attempt counter, New Game, stale banner,
-difficulty switching) that the logic_utils tests cannot see.
+difficulty switching, disappearing messages) that the logic_utils tests cannot see.
 """
 from pathlib import Path
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 APP_PATH = str(Path(__file__).resolve().parent.parent / "app.py")
@@ -40,12 +41,40 @@ def test_app_starts_without_errors():
     assert not at.exception
 
 
+# --- Bug: the attempt counter started at 1 ---
+
 def test_fresh_game_shows_every_allowed_attempt():
-    # The counter used to start at 1, so Normal showed 7 instead of 8
+    # Normal used to show 7 instead of 8
     at = start_app()
     assert "Attempts left: 8" in banner(at)
     assert at.session_state["attempts"] == 0
 
+
+@pytest.mark.parametrize("difficulty, limit", [("Easy", 6), ("Normal", 8), ("Hard", 5)])
+def test_each_difficulty_shows_its_attempt_limit(difficulty, limit):
+    at = start_app(difficulty=difficulty)
+    assert f"Attempts left: {limit}" in banner(at)
+
+
+def test_player_gets_all_eight_attempts_on_normal():
+    at = start_app(secret=50)
+    for _ in range(7):
+        submit_guess(at, "1")
+    assert at.session_state["status"] == "playing"
+    submit_guess(at, "1")
+    assert at.session_state["status"] == "lost"
+    assert "Attempts left: 0" in banner(at)
+
+
+def test_correct_guess_on_the_last_attempt_is_a_win():
+    at = start_app(secret=7, difficulty="Hard")
+    for _ in range(4):
+        submit_guess(at, "1")
+    submit_guess(at, "7")
+    assert at.session_state["status"] == "won"
+
+
+# --- Bug: the banner was one click behind ---
 
 def test_banner_updates_right_after_a_guess():
     # The banner used to be drawn before the guess was processed, so it was one
@@ -59,8 +88,9 @@ def test_banner_updates_right_after_a_guess():
     assert "Attempts left: 6" in banner(at)
 
 
+# --- Bug: the secret turned into a string on every other attempt ---
+
 def test_same_guess_gets_the_same_hint_twice():
-    # The secret used to turn into a string on every other attempt
     at = start_app(secret=50)
     submit_guess(at, "9")
     first_hint = at.warning[0].value
@@ -70,33 +100,76 @@ def test_same_guess_gets_the_same_hint_twice():
     assert first_hint == second_hint
 
 
-def test_player_gets_all_eight_attempts_on_normal():
-    at = start_app(secret=50)
-    for _ in range(7):
-        submit_guess(at, "1")
-    assert at.session_state["status"] == "playing"
-    submit_guess(at, "1")
-    assert at.session_state["status"] == "lost"
-    assert "Attempts left: 0" in banner(at)
-
+# --- Bug: bad input used up attempts ---
 
 def test_invalid_guesses_do_not_use_attempts():
     at = start_app(secret=50)
-    for bad in ("abc", "-2", "5000", "50.9", ""):
+    for bad in ("abc", "-2", "5000", "50.9", "49.99999999999999999", ""):
         submit_guess(at, bad)
         assert len(at.error) == 1
     assert at.session_state["attempts"] == 0
     assert at.session_state["history"] == []
 
 
+def test_guess_is_checked_against_the_current_difficulty_range():
+    at = start_app(difficulty="Easy")
+    submit_guess(at, "50")
+    assert "between 1 and 20" in at.error[0].value
+    assert at.session_state["attempts"] == 0
+
+    at = start_app(difficulty="Hard")
+    submit_guess(at, "150")
+    assert len(at.error) == 0
+    assert at.session_state["attempts"] == 1
+
+
+# --- Bug: scoring ---
+
 def test_first_try_win_scores_100_and_ends_the_game():
     at = start_app(secret=50)
     submit_guess(at, "50")
     assert at.session_state["status"] == "won"
     assert at.session_state["score"] == 100
-    submit_guess(at, "50")
-    assert "already won" in at.success[0].value
 
+    # Submitting again after the win changes nothing
+    submit_guess(at, "60")
+    assert at.session_state["status"] == "won"
+    assert at.session_state["attempts"] == 1
+    assert at.session_state["score"] == 100
+
+
+def test_wrong_guesses_cost_5_points_each():
+    at = start_app(secret=50)
+    submit_guess(at, "60")
+    assert at.session_state["score"] == -5
+    submit_guess(at, "40")
+    assert at.session_state["score"] == -10
+    submit_guess(at, "50")
+    # A win on the third attempt is worth 80
+    assert at.session_state["score"] == 70
+    assert "Final score: 70" in at.success[0].value
+
+
+# --- Bug: the hint and final score disappeared on the next click ---
+
+def test_final_score_stays_on_screen_after_another_click():
+    at = start_app(secret=50)
+    submit_guess(at, "50")
+    at.checkbox[0].uncheck().run()
+    assert "Final score: 100" in at.success[0].value
+
+
+def test_show_hint_checkbox_hides_and_shows_the_last_hint():
+    at = start_app(secret=50)
+    submit_guess(at, "60")
+    assert "LOWER" in at.warning[0].value
+    at.checkbox[0].uncheck().run()
+    assert len(at.warning) == 0
+    at.checkbox[0].check().run()
+    assert "LOWER" in at.warning[0].value
+
+
+# --- Bug: New Game did not start a new game ---
 
 def test_new_game_after_a_loss_resets_everything():
     # New Game used to leave the game stuck on "Game over"
@@ -104,6 +177,7 @@ def test_new_game_after_a_loss_resets_everything():
     for _ in range(8):
         submit_guess(at, "1")
     assert at.session_state["status"] == "lost"
+    assert "Out of attempts" in at.error[0].value
 
     click_new_game(at)
     assert at.session_state["status"] == "playing"
@@ -111,11 +185,15 @@ def test_new_game_after_a_loss_resets_everything():
     assert at.session_state["score"] == 0
     assert at.session_state["history"] == []
     assert "Attempts left: 8" in banner(at)
+    assert len(at.warning) == 0
+    assert len(at.error) == 0
 
     at.session_state["secret"] = 50
     submit_guess(at, "60")
     assert "LOWER" in at.warning[0].value
 
+
+# --- Bug: difficulty was ignored ---
 
 def test_easy_mode_uses_its_own_range():
     # The banner said "1 and 100" and New Game picked secrets up to 100
@@ -127,10 +205,16 @@ def test_easy_mode_uses_its_own_range():
 
 
 def test_switching_difficulty_starts_a_new_game():
-    # The old secret (possibly out of range) used to carry over
+    # The old secret (possibly out of range) and a finished game used to carry over
     at = start_app(secret=87)
-    submit_guess(at, "10")
+    for _ in range(8):
+        submit_guess(at, "10")
+    assert at.session_state["status"] == "lost"
+
     at.sidebar.selectbox[0].set_value("Easy").run()
     assert 1 <= at.session_state["secret"] <= 20
+    assert at.session_state["status"] == "playing"
     assert at.session_state["attempts"] == 0
+    assert at.session_state["score"] == 0
+    assert at.session_state["history"] == []
     assert "Attempts left: 6" in banner(at)

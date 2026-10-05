@@ -1,4 +1,4 @@
-import math
+from decimal import Decimal, InvalidOperation
 
 # FIX: These four functions used to live in app.py, mixed in with the Streamlit UI.
 # Refactored into this module with Claude Code (agent mode) so pytest can test the
@@ -30,27 +30,27 @@ def parse_guess(raw: str, low=None, high=None):
         return False, None, "Enter a guess."
 
     try:
-        number = float(raw)
-    except ValueError:
+        number = Decimal(raw.strip())
+    except InvalidOperation:
         return False, None, "That is not a number."
 
-    # float() also accepts "nan" and "inf", which are not guesses.
-    if not math.isfinite(number):
+    # Decimal also accepts "nan" and "inf", which are not guesses.
+    if not number.is_finite():
         return False, None, "That is not a number."
 
     # FIX: 50.9 used to be cut down to 50 without telling the player, so it could
     # win the game. Claude Code suggested rejecting decimals; "50.0" still counts.
-    if not number.is_integer():
+    # A review pass caught that float() rounds 49.99999999999999999 up to 50, so
+    # this uses Decimal, which compares the exact number that was typed.
+    if number != number.to_integral_value():
         return False, None, "Enter a whole number."
-
-    value = int(number)
 
     # FIX: I noticed the game accepted -2 without any out-of-range message. Claude
     # Code added the optional low/high check so app.py can pass in the real range.
-    if low is not None and high is not None and not low <= value <= high:
+    if low is not None and high is not None and not low <= number <= high:
         return False, None, f"Enter a number between {low} and {high}."
 
-    return True, value, None
+    return True, int(number), None
 
 
 def check_guess(guess, secret):
