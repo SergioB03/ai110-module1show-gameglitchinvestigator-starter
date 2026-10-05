@@ -8,39 +8,34 @@ Answer each question in 3 to 5 sentences. Be specific and honest about what actu
 - List at least two concrete bugs you noticed at the start  
   (for example: "the hints were backwards").
 
-The first time I ran it, the app loaded without errors and looked like a normal number guessing game: a banner saying "Guess a number between 1 and 100", a text box, Submit and New Game buttons, and a sidebar to pick the difficulty. Nothing crashed, but I could not win by following the hints. The hints kept telling me to "Go LOWER!", so I kept guessing lower until I was typing negative numbers like -2, and the game still said "Go LOWER!" and never told me I was out of range. When I ran out of attempts it revealed the secret was 77, so the hints had been sending me the wrong way the whole game, and my score ended at -35. The banner also still said "Attempts left: 1" right above the "Out of attempts!" message.
+**First run.** The app loaded without errors and looked like a normal number guessing game, but I could not win by following the hints. The secret was 77, yet the hints kept saying "Go LOWER!", even when I typed -2, and nothing told me I was out of range. I ran out of attempts with a score of -35. The banner still said "Attempts left: 1" right above the "Out of attempts!" message.
 
-After that I had Claude Code read `app.py` and replay the game with the secret pinned to a known value (using Streamlit's `AppTest` harness), which turned up more bugs than I had noticed by hand. These are the concrete bugs. Line numbers are from the starter `app.py`, before any edits.
+**Bugs I noticed.** Line numbers are from the starter `app.py`, before any edits.
 
-1. **Hints are backwards.** `check_guess` (lines 37-40) returns the right outcome but the wrong message: a guess that is too high says "📈 Go HIGHER!" and one that is too low says "📉 Go LOWER!".
-2. **The secret changes type every other guess.** Lines 158-161 turn the secret into a string on even-numbered attempts. `check_guess` then hits a `TypeError`, swallows it, and falls back to comparing text, where `"9" > "50"`. The same guess can get opposite hints on two submits in a row.
-3. **The attempt counter is off by one.** `attempts` starts at 1 (line 96), so Normal shows "Attempts left: 7" on a fresh page and ends the game after 7 guesses, even though the sidebar says 8 are allowed.
-4. **New Game does not start a new game.** The handler (lines 134-138) never resets `status` or `history`, so a finished game stays stuck on "Game over" (or on "You already won" after a win). It also draws the secret from 1-100 no matter the difficulty.
-5. **Difficulty is not respected.** The banner hardcodes "between 1 and 100" (line 110), Hard's range (1-50, line 10) is narrower than Normal's (1-100), and switching difficulty keeps the old secret.
-6. **Scoring is wrong.** `update_score` adds 5 points for a wrong "Too High" guess on even attempts (lines 57-60), and a win on the first guess pays 70 points instead of the full 100 (line 52 combined with the counter bug). The score also has no lower limit (lines 60 and 63 just subtract 5), so it goes negative: my first game ended at -35, and a win on the last guess can show a negative final score.
-7. **Bad input is handled badly.** Text like "abc" uses up an attempt (line 148 counts before parsing), `50.9` is silently cut down to 50 (line 23), and out-of-range numbers like -2 or 5000 are accepted.
-8. **The banner lags one click behind.** The "Attempts left" banner and the debug panel are drawn (lines 109-119) before the guess is processed (line 147), so they show the previous state.
-9. **Results disappear.** The hint and the "You won" message with the final score are only drawn on the rerun right after Submit (lines 163-180). Any other click, like unticking "Show hint", replaces them with "You already won."
-10. **The starter tests cannot pass.** `logic_utils.py` only raises `NotImplementedError`, and the tests compare `check_guess(...)` to a plain string while the function is documented to return `(outcome, message)`.
+1. **Backwards hints.** A guess below the secret said "📉 Go LOWER!". `check_guess` (lines 37-40) has the two hint messages swapped.
+2. **No range check.** `-2` was accepted and cost me an attempt. `parse_guess` (lines 14-29) never compares the guess with the range.
+3. **Hints that flip.** With a secret of 50, guessing `9` twice gave "Go HIGHER!" and then "Go LOWER!". Lines 158-161 turn the secret into a string on every other attempt, so the numbers are compared as text.
+
+I found the first two by playing. Claude Code found the third and the other bugs in the log below. The [README](README.md) lists every bug and its fix.
 
 **Bug Reproduction Log**
 
-Row 1 is from my own first play-through. The other rows were reproduced with the secret pinned (you can also read the secret in the "Developer Debug Info" panel), so anyone can repeat them.
+Row 1 is my own first game. The other rows use a known secret (it is shown in the "Developer Debug Info" panel), so anyone can repeat them.
 
 | Input Used | Expected Behavior | Actual Behavior | Console Error / Output | Suspected Code Location |
 |------------|-------------------|-----------------|------------------------|-------------------------|
-| Normal, secret 77. Guessed lower and lower following the hints, ending with `-2` | Hint says to go higher; `-2` is rejected as out of range | "📉 Go LOWER!" each time; `-2` accepted and cost an attempt; lost with score -35 | none | `app.py`, `check_guess` lines 37-40 (messages swapped); `parse_guess` has no range check |
-| Secret 50, guess `60` | "Too High" outcome with a hint to go lower | "📈 Go HIGHER!" | none | `app.py`, `check_guess` lines 37-40 |
-| Secret 50, guess `9` twice in a row | Same hint both times (go higher) | 1st submit: "📈 Go HIGHER!"; 2nd submit: "📉 Go LOWER!" | none (the `TypeError` is swallowed by `try/except`) | `app.py` lines 158-161 (secret cast to `str` on even attempts); `check_guess` lines 41-47 (string comparison) |
-| Normal, fresh page, then 7 wrong guesses | Banner starts at "Attempts left: 8"; game ends after the 8th guess | Banner starts at "Attempts left: 7"; "Out of attempts!" after the 7th guess | none | `app.py` line 96 (`attempts = 1`) |
-| Lose (or win) a game, click "New Game 🔁", submit a guess | A fresh game with attempts, history and status reset | Still shows "Game over. Start a new game to try again." (after a win: "You already won. Start a new game to play again."); history and score kept | none | `app.py` lines 134-138 (`status` and `history` never reset) |
-| Switch to Easy (range 1-20), click "New Game 🔁" several times | Banner says 1 to 20; secret is between 1 and 20 | Banner says "between 1 and 100"; secrets such as 97 | none | `app.py` line 110 (hardcoded text); line 136 (`random.randint(1, 100)`) |
-| Secret 50, first guess `60`; separately, first guess `50` | Wrong guess never adds points; first-try win gives the top score (100) | Wrong guess: score goes 0 to +5; first-try win: "Final score: 70" | none | `app.py`, `update_score` lines 52 and 57-60 |
-| Normal, secret 50, six wrong guesses of `1`, then `50` on the last allowed guess | The score never goes below zero, and a win ends with a positive score | Score drops by 5 per wrong guess to -30, then "You won! The secret was 50. Final score: -20" | none | `app.py`, `update_score` lines 60 and 63 (`current_score - 5` with no lower limit) |
-| Type `abc` and submit | Error message, no attempt used | "That is not a number." but attempts go from 1 to 2 | none | `app.py` line 148 (increments before `parse_guess`) |
-| Secret 50, guess `50.9` | Rejected, a guess must be a whole number | "🎉 Correct!" and the game is won | none | `app.py`, `parse_guess` line 23 (`int(float(raw))`) |
-| Win a game, then untick "Show hint" | The win message and final score stay on screen | Replaced by "You already won. Start a new game to play again."; the final score is gone | none | `app.py` lines 140-145 and 174-180 (messages only drawn on the Submit rerun) |
-| Run `python -m pytest` | 3 starter tests pass | 3 failed. Plain `pytest` stops even earlier, with an import error | `NotImplementedError: Refactor this function from app.py into logic_utils.py` (plain `pytest`: `ModuleNotFoundError: No module named 'logic_utils'`) | `logic_utils.py` (stubs only); `tests/test_game_logic.py` compares a tuple to a string; no `pytest.ini` |
+| My first game: Normal, secret 77, guesses going lower, ending with `-2` | Hint says go higher; `-2` rejected as out of range | "📉 Go LOWER!" each time; `-2` accepted; lost with score -35 | none | `check_guess` lines 37-40 (messages swapped); `parse_guess` lines 14-29 (no range check) |
+| Secret 50, guess `60` | Hint to go lower | "📈 Go HIGHER!" | none | `check_guess` lines 37-40 |
+| Secret 50, guess `9` twice | Same hint both times | "📈 Go HIGHER!", then "📉 Go LOWER!" | none (the `TypeError` is swallowed by `try/except`) | lines 158-161 (secret cast to `str` on even attempts); `check_guess` lines 41-47 |
+| Normal, fresh page, then 7 wrong guesses | "Attempts left: 8" at the start; game over after the 8th guess | "Attempts left: 7" at the start; game over after the 7th guess | none | line 96 (`attempts = 1`) |
+| Finish a game, click "New Game 🔁", submit a guess | A fresh game | Stuck on "Game over" (or "You already won"); history and score kept | none | lines 134-138 (`status` and `history` never reset) |
+| Easy (range 1-20), click "New Game 🔁" a few times | Banner says 1 to 20; secret between 1 and 20 | Banner says "between 1 and 100"; secrets such as 97 | none | line 110 (hardcoded text); line 136 (`random.randint(1, 100)`) |
+| Secret 50: first guess `60`; separately, first guess `50` | A wrong guess never adds points; a first-try win scores 100 | Wrong guess: score goes from 0 to +5; first-try win: "Final score: 70" | none | `update_score` lines 52 and 57-60 |
+| Normal, secret 50: guess `1` six times, then `50` | The score never goes below zero | Score falls to -30, then "You won! The secret was 50. Final score: -20" | none | `update_score` lines 60 and 63 (no lower limit) |
+| Type `abc` and submit | Error message, no attempt used | "That is not a number.", but attempts go from 1 to 2 | none | line 148 (counts the attempt before `parse_guess`) |
+| Secret 50, guess `50.9` | Rejected, because it is not a whole number | "🎉 Correct!" and the game is won | none | `parse_guess` line 23 (`int(float(raw))`) |
+| Win a game, then untick "Show hint" | The win message and final score stay on screen | Replaced by "You already won. Start a new game to play again." | none | lines 140-145 and 174-180 (drawn only on the Submit rerun) |
+| Run `python -m pytest` | 3 starter tests pass | 3 failed (plain `pytest` fails earlier, on import) | `NotImplementedError: Refactor this function from app.py into logic_utils.py`. Plain `pytest`: `ModuleNotFoundError: No module named 'logic_utils'` | `logic_utils.py` (stubs only); the tests compare a tuple to a string; no `pytest.ini` |
 
 ---
 
@@ -50,13 +45,19 @@ Row 1 is from my own first play-through. The other rows were reproduced with the
 - Give one example of an AI suggestion that was correct (including what the AI suggested and how you verified the result).
 - Give one example of an AI suggestion you did not accept as written (including what the AI suggested, why you rejected or changed it, and how you verified your version). It does not have to be a suggestion that was wrong: over-engineered, out of scope, harder to read, or a poor fit for this codebase all count.
 
-**Tools.** I used Claude Code inside VS Code, in agent mode. I gave it the assignment and it read the code, replayed the game with a pinned secret, edited `app.py` and `logic_utils.py`, wrote the tests and ran `pytest`. I gave it my own play-through (the game telling me to go lower when the secret was 77, and `-2` never being flagged as out of range), and it stopped to ask me before making the design decisions.
+**Tools.** I used Claude Code inside VS Code, in agent mode. It read the code, replayed the game with a known secret, edited `app.py` and `logic_utils.py`, wrote the tests and ran `pytest`. I gave it my own play-through and made the design decisions it stopped to ask me about, such as the range for Hard mode.
 
-**A suggestion that was correct.** Claude Code said my "Go LOWER!" problem had two separate causes: the two hint messages in `check_guess` were swapped, and `app.py` was turning the secret into a string on every other attempt, so the numbers were being compared as text. It suggested swapping the messages, always passing the secret as an int, and deleting the `try/except TypeError` fallback that was hiding the mix-up. This was verified in three ways. `test_hints_from_my_first_game` replays my secret-77 game and now gets "Go HIGHER!". `test_same_guess_gets_the_same_hint_twice` submits 9 twice against a secret of 50 and gets the same hint both times. Both of those tests fail when they are run against the original starter code.
+**A suggestion that was correct**
 
-**A suggestion I did not accept as written.** The three starter tests compare `check_guess(60, 50)` to the string `"Too High"`, but the function returns a pair like `("Too High", "📉 Go LOWER!")`, so they fail even when the logic is right. One option Claude Code offered was to change `check_guess` to return only the outcome string, so the starter tests would pass untouched. I did not take that option. The docstring in `logic_utils.py` says the function returns `(outcome, message)` and `app.py` unpacks both values, so that change would have rewritten a documented contract and the app's call site just to satisfy three assertions. I kept the function as documented and had the three tests updated to unpack the pair instead. All 79 tests pass and the game still shows both the outcome and the hint.
+- *What the AI suggested:* Claude Code said my "Go LOWER!" problem had two causes: the two hint messages in `check_guess` were swapped, and `app.py` turned the secret into a string on every other attempt. It suggested swapping the messages and always comparing the secret as an int.
+- *Why it was correct:* Both causes were real. With only the messages swapped, a guess of `9` against a secret of 50 would still get the wrong hint on every other attempt.
+- *How I verified it:* `test_hints_from_my_first_game` replays my secret-77 game and gets "Go HIGHER!", and `test_same_guess_gets_the_same_hint_twice` gets the same hint for `9` twice. Both tests fail on the starter code and pass on the fixed code.
 
-**A second one: negative scores.** Claude Code's first fix made every wrong guess cost 5 points but left the score with no lower limit. It told me this meant a win on the very last attempt could show a negative final score (-5 on Normal) and that it had left that alone because it followed from the penalty rule. I did not accept that. My own first game had ended at -35, so when Claude Code pointed this out I asked for the score to never drop below zero. `update_score` now uses `max(0, current_score - 5)`. `test_lost_game_ends_with_a_score_of_zero` and `test_win_on_the_last_attempt_shows_a_positive_final_score` fail on the version before this change and pass now, with a lost game ending at 0 and a last-attempt win showing "Final score: 30".
+**A suggestion I did not accept as written**
+
+- *What the AI suggested:* Claude Code's first scoring fix made every wrong guess cost 5 points with no lower limit. It told me a win on the last attempt could then show a negative final score (-5 on Normal), and it had left that as it was.
+- *Why I changed it:* My own first game had ended at -35 and I did not want the score to go below zero, so I asked for it to stop at 0.
+- *How I verified my version:* For a wrong guess, `update_score` now returns `max(0, current_score - 5)`. `test_lost_game_ends_with_a_score_of_zero` and `test_win_on_the_last_attempt_shows_a_positive_final_score` fail on the earlier version and pass now: a lost game ends at 0, and a last-attempt win shows "Final score: 30".
 
 ---
 
@@ -67,11 +68,11 @@ Row 1 is from my own first play-through. The other rows were reproduced with the
   and what it showed you about your code.
 - Did AI help you design or understand any tests? How?
 
-**Deciding a bug was fixed.** I counted a bug as fixed only when a test that fails on the original code passes on the fixed code. Claude Code ran the new test suite against a copy of the starter code, where 49 of the 79 tests failed, and then against the fixed code, where all 79 pass. In the live game, entering `-2` now shows "Enter a number between 1 and 100." and the banner stays at "Attempts left: 8", where my first play-through accepted `-2` and charged me an attempt.
+**How I decided a bug was fixed.** A bug counted as fixed only when a test that fails on the starter code passes on the fixed code. Run against the starter code, 49 of the 79 tests fail. On the fixed code all 79 pass. In the live game, `-2` now shows "Enter a number between 1 and 100." and no attempt is used.
 
-**One test and what it showed.** `test_same_guess_gets_the_same_hint_twice` in `tests/test_app_flow.py` drives the real app with Streamlit's `AppTest`: it pins the secret to 50 and submits `9` twice. On the original code the first submit said "Go HIGHER!" and the second said "Go LOWER!". On the fixed code both say "📈 Go HIGHER!". That showed me the flip-flopping hints came from `app.py` changing the secret's type between attempts, not from the comparison in `check_guess`.
+**One test and what it showed.** `test_same_guess_gets_the_same_hint_twice` in `tests/test_app_flow.py` sets the secret to 50 and submits `9` twice through Streamlit's `AppTest`. The starter code answered "Go HIGHER!" and then "Go LOWER!". The fixed app says "📈 Go HIGHER!" both times. That showed me the flipping hints came from `app.py` changing the secret's type between attempts, not from the comparison in `check_guess`.
 
-**How AI helped with tests.** Claude Code wrote the tests, and two problems came out of checking them instead of trusting them. Its first version of the banner test passed on the buggy code too, because the off-by-one counter and the one-click-behind banner cancelled each other out and showed the right number by accident. It was rewritten to also check the attempt count in session state. Running plain `pytest`, the way the assignment says to, failed with `ModuleNotFoundError: No module named 'logic_utils'` even though `python -m pytest` worked, which is why the repo now has a `pytest.ini` that puts the project root on the import path. After the first round of fixes, a second Claude agent reviewed the diff and found two more problems: `float()` was rounding a guess of `49.99999999999999999` up to 50, and the final score vanished on the next click. Each one got a fix and a test.
+**How AI helped with tests.** Claude Code wrote the tests, and checking them mattered more than trusting them. Its first test of the "Attempts left" banner also passed on the starter code, because two bugs cancelled out: the attempt counter started one too high, and the stale banner showed the count from before the click. It was rewritten to check the attempt count in session state as well. A review by a second Claude agent then found two bugs the first round of fixes had missed: `49.99999999999999999` was rounded up to 50, and the final score vanished on the next click. Each one got a fix and a test.
 
 ---
 
@@ -79,7 +80,7 @@ Row 1 is from my own first play-through. The other rows were reproduced with the
 
 - How would you explain Streamlit "reruns" and session state to a friend who has never used Streamlit?
 
-Streamlit runs your whole script from top to bottom again every time you click a button or change a widget. Normal variables are wiped on each rerun, so anything the game has to remember, like the secret number, the attempt count and the score, has to be stored in `st.session_state`, which works like a dictionary that survives reruns. This starter already kept the secret in session state, so the number itself never changed. What changed was its type, because the code turned it into a string on every other attempt. The rerun order also explained the stale banner: the banner was drawn near the top of the script, before the button click further down had been handled. The fix was to reserve its spot with `st.empty()` and fill it in at the end of the script, after the state was updated.
+Streamlit runs your whole script again, from top to bottom, every time you click a button or change a widget. Ordinary variables are reset on each rerun, so anything the game has to remember (the secret, the attempt count, the score) must be stored in `st.session_state`, which works like a dictionary that survives reruns. In this game the secret was already in session state, so the number never changed. The bug was that the code turned it into a string on every other attempt. The rerun order also caused the stale banner: it was drawn near the top of the script, before the button click further down was handled, so it is now filled in at the end.
 
 ---
 
@@ -90,8 +91,8 @@ Streamlit runs your whole script from top to bottom again every time you click a
 - What is one thing you would do differently next time you work with AI on a coding task?
 - In one or two sentences, describe how this project changed the way you think about AI generated code.
 
-**A habit to reuse.** Running new tests against the old, broken code before trusting them. A test that passes on the buggy version proves nothing, and that check is what exposed the weak banner test. I also want to keep making small commits per step (mark the bugs, fix, test, document) so the history shows how the work went.
+**A habit to reuse.** Run new tests against the old, broken code before trusting them. A test that also passes on the buggy version proves nothing, and that check is what exposed the weak banner test. I will also keep making one small commit per step (mark the bugs, fix, test, document).
 
-**What I would do differently.** I would play the game for longer and write my own bug list before handing the code to the AI. I found the backwards hints and the missing range check by hand, and Claude Code found the rest by reading the code, so I can't tell how many of those I would have caught myself. I would also make sure one command has finished before the AI or I start another: during setup Claude Code started a second `pip install` while mine was still running, and it failed on a locked file.
+**What I would do differently.** I would play the game for longer and write my own bug list before handing the code to the AI. I found the backwards hints and the missing range check by hand and Claude Code found the rest, so I cannot tell how many I would have caught myself. I would also let my command finish before the AI starts another: during setup Claude Code started a second `pip install` while mine was still running, and it failed on a locked file.
 
-**How this changed my view of AI-generated code.** This game never crashed or printed a single error, and at least ten things in it were still wrong. AI-generated code that runs is a draft to be tested, and the footer claiming it was "production-ready" is the kind of confident claim I now check before believing.
+**How this changed my view of AI-generated code.** This game never crashed or printed an error, and at least ten things in it were still wrong. AI-generated code that runs is a draft that still has to be tested.
